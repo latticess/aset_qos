@@ -11,6 +11,8 @@ QOSDEV=enp0s9
 CONFIDX_TYPE=0
 CONFIDX_ID=1
 CONFIDX_TCID=2
+#   root component index
+CONFIDX_R_LIMIT=3
 #   group component index
 CONFIDX_G_LLIMIT=3
 CONFIDX_G_ULIMIT=4
@@ -23,7 +25,6 @@ CONFIDX_N_SRC_IP=7
 CONFIDX_N_SRC_PORT=8
 CONFIDX_N_DST_IP=9
 CONFIDX_N_DST_PORT=10
-
 
 
 function read_conf_file() {
@@ -40,6 +41,21 @@ function read_conf_file() {
 #
 # Functions to execute TC commands
 #
+
+# add root class by tc command
+#   tc_add_rootqdisc
+function tc_add_rootqdisc() {
+	echo tc qdisc add dev $QOSDEV root handle 1: htb
+	tc qdisc add dev $QOSDEV root handle 1: htb
+}
+
+# add root class by tc command
+#   tc_add_rootclass <max_bps>
+#       class_id is always 1
+function tc_add_rootclass() {
+	echo tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
+	tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
+}
 
 # add a class by tc command
 #	tc_add_class <class_id> <parent_id> <min_bps> <max_bps>
@@ -98,6 +114,13 @@ function tc_del_leafqdisc() {
 	tc qdisc delete dev $QOSDEV handle $1: parent 1:$1
 }
 
+# add root to TC
+#	tc_add_root <max_bps>
+function tc_add_root() {
+	tc_add_rootqdisc
+	tc_add_rootclass $1
+}
+
 # add group to TC
 #	tc_add_group <tcid> <min_bps> <max_bps>
 function tc_add_group() {
@@ -110,6 +133,12 @@ function tc_add_node() {
 	tc_add_class $1 $2 $3 $4
 	tc_add_filter $1 $5 $6 $7 $8
 	tc_add_leafqdisc $1
+}
+
+# delete group by tc command. Delete class
+#	tc_del_group <tcid>
+function tc_del_group() {
+	tc_del_class $1
 }
 
 # delete node by tc command. Delete filter and leaf class
@@ -131,13 +160,6 @@ function init() {
 	#modprobe ifb
 	#ifconfig ifb0 up
 
-	# initialize root qdisc
-	echo tc qdisc add dev $QOSDEV root handle 1: htb
-	tc qdisc add dev $QOSDEV root handle 1: htb
-	echo tc class add dev $QOSDEV parent 1: classid 1:1 htb rate 100mbit
-	tc class add dev $QOSDEV parent 1: classid 1:1 htb rate 100mbit
-
-
 	for line in "${conf_lines[@]}"; do
 		if [[ "$line" == "#"* ]]; then
 			#echo ... Comment line
@@ -146,7 +168,9 @@ function init() {
 
 		local array=(${line//,/ })
 		#echo ... "${array[0]}"
-		if [ "${array[$CONFIDX_TYPE]}" = "group" ]; then
+		if [ "${array[$CONFIDX_TYPE]}" = "root" ]; then
+			tc_add_root ${array[$CONFIDX_R_LIMIT]}
+		elif [ "${array[$CONFIDX_TYPE]}" = "group" ]; then
 			tc_add_group ${array[$CONFIDX_TCID]} ${array[$CONFIDX_G_LLIMIT]} ${array[$CONFIDX_G_ULIMIT]} 
 		elif [ "${array[$CONFIDX_TYPE]}" = "node" ]; then
 			tc_add_node ${array[$CONFIDX_TCID]} ${array[$CONFIDX_N_P_TCID]} \
@@ -158,6 +182,11 @@ function init() {
 	done
 }
 
+
+# clean all qdiscs, classes, and filters, but not delete configurations
+function clean() {
+	tc qdisc delete dev $QOSDEV root
+}
 
 # get new tc id
 #	read config file and get new tc id
@@ -207,6 +236,12 @@ function get_tcid() {
 	fi
 }
 
+# make string to store the root info in config file
+#	make_root_conf <id> <max_bps>
+function make_root_conf() {
+	echo "root,$1,1,$2"
+}
+
 # make string to store the group info in config file
 #	make_group_conf <id> <tcid> <min_bps> <max_bps>
 function make_group_conf() {
@@ -217,6 +252,14 @@ function make_group_conf() {
 #	make_node_conf <id> <tcid> <parent_id> <parent_tcid> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port>
 function make_node_conf() {
 	echo "node,$1,$2,$3,$4,$5,$6,$7,$8,$9,${10}"
+}
+
+
+# add root
+#   add_root <root_id> <max_bps>
+function add_root() {
+	tc_add_root $2
+	echo $(make_root_conf $1 $2) >> $CONFFILE
 }
 
 # add new group
@@ -353,9 +396,16 @@ case "$1" in
 	init)
 		init
 		;;
+	clean)
+		clean
+		;;
 	add)
 		shift 1
 		case "$1" in
+			root)
+				shit 1
+				add_root $*
+				;;
 			group)
 				shift 1
 				add_new_group $*
@@ -410,7 +460,7 @@ case "$1" in
 		fi
 		;;
 	*)
-		echo "Usage: $0 {init|add|delete|list}"
+		echo "Usage: $0 {init|clean|add|delete|list}"
 		exit 1
 esac
 
