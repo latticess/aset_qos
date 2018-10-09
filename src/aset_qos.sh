@@ -25,6 +25,7 @@ CONFIDX_N_SRC_IP=7
 CONFIDX_N_SRC_PORT=8
 CONFIDX_N_DST_IP=9
 CONFIDX_N_DST_PORT=10
+CONFIDX_N_PRIO=11
 
 
 function read_conf_file() {
@@ -58,10 +59,14 @@ function tc_add_rootclass() {
 }
 
 # add a class by tc command
-#	tc_add_class <class_id> <parent_id> <min_bps> <max_bps>
+#	tc_add_class <class_id> <parent_id> <min_bps> <max_bps> <prio>
 function tc_add_class() {
-	echo tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 
-	tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 
+	local __prio=""
+	if [ "$5" != "" ]; then
+		__prio="prio $5"
+	fi
+	echo tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 $__prio
+	tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 $__prio
 }
 
 # add a filter by tc command
@@ -128,9 +133,9 @@ function tc_add_group() {
 }
 
 # add a node to TC
-#	tc_add_node <tcid> <parent_tcid> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port>
+#	tc_add_node <tcid> <parent_tcid> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port> <prio>
 function tc_add_node() {
-	tc_add_class $1 $2 $3 $4
+	tc_add_class $1 $2 $3 $4 $9
 	tc_add_filter $1 $5 $6 $7 $8
 	tc_add_leafqdisc $1
 }
@@ -176,7 +181,8 @@ function init() {
 			tc_add_node ${array[$CONFIDX_TCID]} ${array[$CONFIDX_N_P_TCID]} \
 					${array[$CONFIDX_N_LLIMIT]} ${array[$CONFIDX_N_ULIMIT]} \
 					${array[$CONFIDX_N_SRC_IP]} ${array[$CONFIDX_N_SRC_PORT]} \
-					${array[$CONFIDX_N_DST_IP]} ${array[$CONFIDX_N_DST_PORT]}
+					${array[$CONFIDX_N_DST_IP]} ${array[$CONFIDX_N_DST_PORT]} \
+					${array[$CONFIDX_N_PRIO]}
 		fi
 
 	done
@@ -249,9 +255,9 @@ function make_group_conf() {
 }
 
 # make string to store the node info in config file
-#	make_node_conf <id> <tcid> <parent_id> <parent_tcid> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port>
+#	make_node_conf <id> <tcid> <parent_id> <parent_tcid> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port> <prio>
 function make_node_conf() {
-	echo "node,$1,$2,$3,$4,$5,$6,$7,$8,$9,${10}"
+	echo "node,$1,$2,$3,$4,$5,$6,$7,$8,$9,${10},${11}"
 }
 
 
@@ -266,30 +272,33 @@ function add_root() {
 #	add_new_group <group_id> <min_bps> <max_bps>
 function add_new_group() {
 	get_new_tcid
-	tcid=$?
-	echo New ID: $tcid
-	tc_add_group $tcid $2 $3
-	echo $(make_group_conf $1 $tcid $2 $3) >> $CONFFILE
+	local __tcid=$?
+	echo New ID: $__tcid
+	tc_add_group $__tcid $2 $3
+	echo $(make_group_conf $1 $__tcid $2 $3) >> $CONFFILE
 }
 
 # add new node
-#	add_new_node <id> <parent_id> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port>
+#	add_new_node <id> <parent_id> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port> <prio>
 function add_new_node() {
 	get_new_tcid
-	tcid=$?
-	echo New ID: $tcid
+	local __tcid=$?
+	echo New ID: $__tcid
 	get_tcid $2
-	parent_tcid=$?
-	if [ "$parent_tcid" == "0" ]; then
+	local __parent_tcid=$?
+	if [ "$__parent_tcid" == "0" ]; then
 		echo "Cannot found the parent ID $2"
 		return
 	fi
+	echo Parent ID: $__parent_tcid
 
-	echo Parent ID: $parent_tcid
-	tc_add_node $tcid $parent_tcid $3 $4 $5 $6 $7 $8
-	echo $(make_node_conf $1 $tcid $2 $parent_tcid $3 $4 $5 $6 $7 $8) >> $CONFFILE
+	local __prio=$9
+	if [ "$__prio" == "" ]; then
+		__prio=99
+	fi
+	tc_add_node $__tcid $__parent_tcid $3 $4 $5 $6 $7 $8 $__prio
+	echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $__prio) >> $CONFFILE
 }
-
 
 
 # delete group. It delete all child nodes
@@ -415,9 +424,11 @@ case "$1" in
 				add_new_node $*
 				;;
 			*)
-				echo "Usage: $0 add group <id> <low_limit> <uppper_limit>"
-				echo "       $0 add node <id> <parent_id> <low_limit> <uppper_limit> <src_ip>, <src_port> <dst_ip> <dst_port>"
+				echo "Usage: $0 add root  <id> <uppper_limit>"
+				echo "       $0 add group <id> <low_limit> <uppper_limit>"
+				echo "       $0 add node  <id> <parent_id> <low_limit> <uppper_limit> <src_ip>, <src_port> <dst_ip> <dst_port> [<priority>]"
 				echo "       If you don't want to specify src/dst ip/port, please write 0"
+				echo "       Default priority is 99 when you do not specify priority"
 				exit 1
 		esac
 		;;
