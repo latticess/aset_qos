@@ -31,11 +31,16 @@ CONFIDX_N_P_ID=3
 CONFIDX_N_P_TCID=4
 CONFIDX_N_LLIMIT=5
 CONFIDX_N_ULIMIT=6
-CONFIDX_N_SRC_IP=7
-CONFIDX_N_SRC_PORT=8
-CONFIDX_N_DST_IP=9
-CONFIDX_N_DST_PORT=10
-CONFIDX_N_PRIO=11
+CONFIDX_N_PROTOCOL=7
+CONFIDX_N_SRC_IP=8
+CONFIDX_N_SRC_PORT=9
+CONFIDX_N_DST_IP=10
+CONFIDX_N_DST_PORT=11
+CONFIDX_N_PRIO=12
+
+
+PROTOCOL_TCP=6
+PROTOCOL_UDP=17
 
 
 function read_conf_file() {
@@ -69,7 +74,7 @@ function tc_add_rootclass() {
 }
 
 # add a class by tc command
-#	tc_add_class <class_id> <parent_id> <min_bps> <max_bps> <prio>
+#	tc_add_class $1=<class_id> $2=<parent_id> $3=<min_bps> $4=<max_bps> $5=<prio>
 function tc_add_class() {
 	local __prio=""
 	if [ "$5" != "" ]; then
@@ -80,21 +85,46 @@ function tc_add_class() {
 }
 
 # add a filter by tc command
-#	tc_add_filter <tcid> <src_ip> <src_port> <dst_ip> <dst_port>
+#	tc_add_filter $1=<tcid>
+#                 $2=<protocol>
+#                 $3=<src_ip> $4=<src_port>
+#                 $5=<dst_ip> $6=<dst_port>
 function tc_add_filter() {
 	local __param=""
-	if [ "$2" != "0" ]; then
-		__param="$__param match ip src $2/32"
+
+	# protocol
+	local __protocol=""
+	if [ "$2" == "tcp" ]; then
+		__protocol=$PROTOCOL_TCP
+	elif [ "$2" == "udp" ]; then
+		__protocol=$PROTOCOL_UDP
 	fi
+	if [ "$__protocol" != "" ]; then
+		__param="$__param match ip protocol $__protocol 0xff"
+	fi
+
+	# src_ip
 	if [ "$3" != "0" ]; then
-		__param="$__param match tcp src $3 0xffff"
+		#__param="$__param match ip src $3/32"
+		__param="$__param match ip src $3"
 	fi
+
+	# src_port
 	if [ "$4" != "0" ]; then
-		__param="$__param match ip dst $4/32"
+		__param="$__param match ip sport $4 0xffff"
 	fi
+
+	# dst_ip
 	if [ "$5" != "0" ]; then
-		__param="$__param match tcp dst $5 0xffff"
+		#__param="$__param match ip dst $5/32"
+		__param="$__param match ip dst $5"
 	fi
+
+	# dst_port
+	if [ "$6" != "0" ]; then
+		__param="$__param match ip dport $6 0xffff"
+	fi
+
 	__param="$__param flowid 1:$1"
 	#echo $__param
 	echo tc filter add dev $QOSDEV parent 1: prio $1 protocol ip u32 $__param
@@ -143,10 +173,15 @@ function tc_add_group() {
 }
 
 # add a node to TC
-#	tc_add_node <tcid> <parent_tcid> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port> <prio>
+#	tc_add_node $1=<tcid> $2=<parent_tcid>
+#               $3=<min_bps> $4=<max_bps>
+#               $5=<protocol>
+#               $6=<src_ip> $7=<src_port>
+#               $8=<dst_ip> $9=<dst_port>
+#               $10=<prio>
 function tc_add_node() {
-	tc_add_class $1 $2 $3 $4 $9
-	tc_add_filter $1 $5 $6 $7 $8
+	tc_add_class $1 $2 $3 $4 ${10}
+	tc_add_filter $1 $5 $6 $7 $8 $9
 	tc_add_leafqdisc $1
 }
 
@@ -199,11 +234,11 @@ function init() {
 		elif [ "${array[$CONFIDX_TYPE]}" = "node" ]; then
 			tc_add_node ${array[$CONFIDX_TCID]} ${array[$CONFIDX_N_P_TCID]} \
 					${array[$CONFIDX_N_LLIMIT]} ${array[$CONFIDX_N_ULIMIT]} \
+					${array[$CONFIDX_N_PROTOCOL]} \
 					${array[$CONFIDX_N_SRC_IP]} ${array[$CONFIDX_N_SRC_PORT]} \
 					${array[$CONFIDX_N_DST_IP]} ${array[$CONFIDX_N_DST_PORT]} \
 					${array[$CONFIDX_N_PRIO]}
 		fi
-
 	done
 }
 
@@ -282,21 +317,26 @@ function make_group_conf() {
 }
 
 # make string to store the node info in config file
-#	make_node_conf <id> <tcid> <parent_id> <parent_tcid> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port> <prio>
+#	make_node_conf $1=<id> $2=<tcid> $3=<parent_id> $4=<parent_tcid>
+#                  $5=<min_bps> $6=<max_bps>
+#                  $7=<protocol>
+#                  $8=<src_ip> $9=<src_port>
+#                  $10=<dst_ip> $11=<dst_port>
+#                  $12=<prio>
 function make_node_conf() {
-	echo "node,$1,$2,$3,$4,$5,$6,$7,$8,$9,${10},${11}"
+	echo "node,$1,$2,$3,$4,$5,$6,$7,$8,$9,${10},${11},${12}"
 }
 
 
 # add root
-#   add_root <root_id> <max_bps>
+#   add_root $1=<root_id> $2=<max_bps>
 function add_root() {
 	tc_add_root $2
 	echo $(make_root_conf $1 $2) >> $CONFFILE
 }
 
 # add new group
-#	add_new_group <group_id> <min_bps> <max_bps>
+#	add_new_group $1=<group_id> $2=<min_bps> $3=<max_bps>
 function add_new_group() {
 	get_new_tcid
 	local __tcid=$?
@@ -306,7 +346,12 @@ function add_new_group() {
 }
 
 # add new node
-#	add_new_node <id> <parent_id> <min_bps> <max_bps> <src_ip> <src_port> <dst_ip> <dst_port> <prio>
+#	add_new_node $1=<id> $2=<parent_id>
+#                $3=<min_bps> $4=<max_bps>
+#                $5=<protocol>
+#                $6=<src_ip> $7=<src_port>
+#                $8=<dst_ip> $9=<dst_port>
+#                $10=<prio>
 function add_new_node() {
 	get_new_tcid
 	local __tcid=$?
@@ -319,12 +364,12 @@ function add_new_node() {
 	fi
 	echo Parent ID: $__parent_tcid
 
-	local __prio=$9
+	local __prio=${10}
 	if [ "$__prio" == "" ]; then
 		__prio=99
 	fi
-	tc_add_node $__tcid $__parent_tcid $3 $4 $5 $6 $7 $8 $__prio
-	echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $__prio) >> $CONFFILE
+	tc_add_node $__tcid $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio
+	echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio) >> $CONFFILE
 }
 
 
@@ -453,8 +498,8 @@ case "$1" in
 			*)
 				echo "Usage: $0 add root  <id> <uppper_limit>"
 				echo "       $0 add group <id> <low_limit> <uppper_limit>"
-				echo "       $0 add node  <id> <parent_id> <low_limit> <uppper_limit> <src_ip>, <src_port> <dst_ip> <dst_port> [<priority>]"
-				echo "       If you don't want to specify src/dst ip/port, please write 0"
+				echo "       $0 add node  <id> <parent_id> <low_limit> <uppper_limit> <protocol> <src_ip> <src_port> <dst_ip> <dst_port> [<priority>]"
+				echo "       If you don't want to specify protocol, src_ip, src_port, dst_ip, dst_port, please write 0"
 				echo "       Default priority is 99 when you do not specify priority"
 				exit 1
 		esac
