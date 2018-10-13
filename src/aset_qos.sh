@@ -2,8 +2,18 @@
 
 #CONFFILE=/etc/aset/qos/qos.conf
 CONFFILE=/home/kimsh/QoS/git/aset_qos/conf/qos.conf
-QOSDEV=enp0s9
-#QOSDEV=ifb0
+NDEV=enp0s8
+INGRESS=true
+
+IFBMOD=ifb
+IFBDEV=ifb0
+
+
+if [ $INGRESS == "true" ]; then
+	QOSDEV=$IFBDEV
+else
+	QOSDEV=$NDEV
+fi
 
 
 # configuration file index
@@ -162,8 +172,17 @@ function init() {
 	echo qos initialize
 
 	# initialize ingress virtual device, ifb0
-	#modprobe ifb
-	#ifconfig ifb0 up
+	if [[ $INGRESS == "true" ]]; then
+		echo Loading ifb device
+		modprobe $IFBMOD
+		ifconfig $IFBDEV up
+
+		echo Ingress QoS setting
+		echo tc qdisc add dev $NDEV ingress
+		tc qdisc add dev $NDEV ingress
+		echo tc filter add dev $NDEV parent ffff: u32 match u32 0 0 action mirred egress redirect dev $IFBDEV
+		tc filter add dev $NDEV parent ffff: u32 match u32 0 0 action mirred egress redirect dev $IFBDEV
+	fi
 
 	for line in "${conf_lines[@]}"; do
 		if [[ "$line" == "#"* ]]; then
@@ -191,7 +210,15 @@ function init() {
 
 # clean all qdiscs, classes, and filters, but not delete configurations
 function clean() {
+	echo Clearing all TC settings.
 	tc qdisc delete dev $QOSDEV root
+	if [ $INGRESS == "true" ]; then
+		echo Clearing ingress qos device
+		tc qdisc delete dev $NDEV ingress
+		ifconfig ifb0 down
+		rmmod ifb
+		echo Finished
+	fi
 }
 
 # get new tc id
