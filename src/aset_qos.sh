@@ -1,13 +1,22 @@
 #!/bin/bash
 
+#### User configurations
+
+# config file location
 #CONFFILE=/etc/aset/qos/qos.conf
 CONFFILE=/home/kimsh/QoS/git/aset_qos/conf/qos.conf
+
+# QoS device definitions
 NDEV=enp0s8
 INGRESS=true
 
+#### End of user configuration
+
+
+
+# Ingress device setting
 IFBMOD=ifb
 IFBDEV=ifb0
-
 
 if [ $INGRESS == "true" ]; then
 	QOSDEV=$IFBDEV
@@ -15,6 +24,10 @@ else
 	QOSDEV=$NDEV
 fi
 
+
+# Default priorities
+PRIO_DEFAULT=101
+PRIO_LOWEST=102
 
 # configuration file index
 #   common component index
@@ -61,8 +74,8 @@ function read_conf_file() {
 # add root class by tc command
 #   tc_add_rootqdisc
 function tc_add_rootqdisc() {
-	echo tc qdisc add dev $QOSDEV root handle 1: htb
-	tc qdisc add dev $QOSDEV root handle 1: htb
+	echo tc qdisc add dev $QOSDEV root handle 1: htb default 2
+	tc qdisc add dev $QOSDEV root handle 1: htb default 2
 }
 
 # add root class by tc command
@@ -72,6 +85,17 @@ function tc_add_rootclass() {
 	echo tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
 	tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
 }
+
+# add default node to root class by tc command
+#   tc_add_defaultnode <max_bps>
+#       class_id is 2
+function tc_add_defaultnode() {
+	echo tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $1 prio $PRIO_LOWEST
+	tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $1 prio $PRIO_LOWEST
+	echo tc qdisc add dev $QOSDEV parent 1:2 handle 2: pfifo_fast
+	tc qdisc add dev $QOSDEV parent 1:2 handle 2: pfifo_fast
+}
+
 
 # add a class by tc command
 #	tc_add_class $1=<class_id> $2=<parent_id> $3=<min_bps> $4=<max_bps> $5=<prio>
@@ -164,6 +188,7 @@ function tc_del_leafqdisc() {
 function tc_add_root() {
 	tc_add_rootqdisc
 	tc_add_rootclass $1
+	tc_add_defaultnode $1
 }
 
 # add group to TC
@@ -271,9 +296,8 @@ function get_new_tcid() {
 		__ids[${array[$CONFIDX_TCID]}]=1
 	done
 
-	local counter=2
-	until [ "${__ids[$counter]}" != "1" ]
-	do
+	local counter=3
+	until [ "${__ids[$counter]}" != "1" ]; do
 		((counter++))
 	done
 
@@ -366,7 +390,7 @@ function add_new_node() {
 
 	local __prio=${10}
 	if [ "$__prio" == "" ]; then
-		__prio=99
+		__prio=$PRIO_DEFAULT
 	fi
 	tc_add_node $__tcid $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio
 	echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio) >> $CONFFILE
@@ -500,7 +524,7 @@ case "$1" in
 				echo "       $0 add group <id> <low_limit> <uppper_limit>"
 				echo "       $0 add node  <id> <parent_id> <low_limit> <uppper_limit> <protocol> <src_ip> <src_port> <dst_ip> <dst_port> [<priority>]"
 				echo "       If you don't want to specify protocol, src_ip, src_port, dst_ip, dst_port, please write 0"
-				echo "       Default priority is 99 when you do not specify priority"
+				echo "       Default priority is $PRIO_DEFAULT when you do not specify priority"
 				exit 1
 		esac
 		;;
