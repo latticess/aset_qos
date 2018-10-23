@@ -55,6 +55,7 @@ CONFIDX_N_PRIO=12
 PROTOCOL_TCP=6
 PROTOCOL_UDP=17
 
+tcRes=true
 
 function read_conf_file() {
 	local counter=0
@@ -74,26 +75,39 @@ function read_conf_file() {
 # add root class by tc command
 #   tc_add_rootqdisc
 function tc_add_rootqdisc() {
-	echo tc qdisc add dev $QOSDEV root handle 1: htb default 2
+	#echo tc qdisc add dev $QOSDEV root handle 1: htb default 2
 	tc qdisc add dev $QOSDEV root handle 1: htb default 2
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 # add root class by tc command
 #   tc_add_rootclass <max_bps>
 #       class_id is always 1
 function tc_add_rootclass() {
-	echo tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
+	#echo tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
 	tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 # add default node to root class by tc command
 #   tc_add_defaultnode <max_bps>
 #       class_id is 2
 function tc_add_defaultnode() {
-	echo tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $1 prio $PRIO_LOWEST
+	#echo tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $1 prio $PRIO_LOWEST
 	tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $1 prio $PRIO_LOWEST
-	echo tc qdisc add dev $QOSDEV parent 1:2 handle 2: pfifo_fast
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
+
+	#echo tc qdisc add dev $QOSDEV parent 1:2 handle 2: pfifo_fast
 	tc qdisc add dev $QOSDEV parent 1:2 handle 2: pfifo_fast
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 
@@ -104,8 +118,11 @@ function tc_add_class() {
 	if [ "$5" != "" ]; then
 		__prio="prio $5"
 	fi
-	echo tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 $__prio
+	#echo tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 $__prio
 	tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 $__prio
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 # add a filter by tc command
@@ -151,36 +168,52 @@ function tc_add_filter() {
 
 	__param="$__param flowid 1:$1"
 	#echo $__param
-	echo tc filter add dev $QOSDEV parent 1: prio $1 protocol ip u32 $__param
+	#echo tc filter add dev $QOSDEV parent 1: prio $1 protocol ip u32 $__param
 	tc filter add dev $QOSDEV parent 1: prio $1 protocol ip u32 $__param
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 # add pfifo_fast qdisc to the leaf node by tc command
 #	tc_add_qdisc_pfifo_fast <tcid>
 function tc_add_leafqdisc() {
-	echo tc qdisc add dev $QOSDEV parent 1:$1 handle 10:$1 pfifo_fast
+	#echo tc qdisc add dev $QOSDEV parent 1:$1 handle 10:$1 pfifo_fast
 	tc qdisc add dev $QOSDEV parent 1:$1 handle $1: pfifo_fast
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 
 # delete class by tc command
 #	tc_del_class <tcid>
 function tc_del_class() {
-	echo tc class delete dev $QOSDEV classid 1:$1
+	#echo tc class delete dev $QOSDEV classid 1:$1
 	tc class delete dev $QOSDEV classid 1:$1
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 # delete filter by tc command
 #	tc_del_filter <tcid>
 function tc_del_filter() {
-	echo tc filter delete dev $QOSDEV prio $1
+	#echo tc filter delete dev $QOSDEV prio $1
 	tc filter delete dev $QOSDEV parent 1: prio $1
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 # delete leaf qdisc by tc command
 #	tc_del_leafqdisc <tcid>
 function tc_del_leafqdisc() {
+	#echo tc qdisc delete dev $QOSDEV handle $1: parent 1:$1
 	tc qdisc delete dev $QOSDEV handle $1: parent 1:$1
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
 }
 
 # add root to TC
@@ -238,9 +271,9 @@ function init() {
 		ifconfig $IFBDEV up
 
 		echo Ingress QoS setting
-		echo tc qdisc add dev $NDEV ingress
+		#echo tc qdisc add dev $NDEV ingress
 		tc qdisc add dev $NDEV ingress
-		echo tc filter add dev $NDEV parent ffff: u32 match u32 0 0 action mirred egress redirect dev $IFBDEV
+		#echo tc filter add dev $NDEV parent ffff: u32 match u32 0 0 action mirred egress redirect dev $IFBDEV
 		tc filter add dev $NDEV parent ffff: u32 match u32 0 0 action mirred egress redirect dev $IFBDEV
 	fi
 
@@ -356,7 +389,9 @@ function make_node_conf() {
 #   add_root $1=<root_id> $2=<max_bps>
 function add_root() {
 	tc_add_root $2
-	echo $(make_root_conf $1 $2) >> $CONFFILE
+	if [ $tcRes == true ]; then
+		echo $(make_root_conf $1 $2) >> $CONFFILE
+	fi
 }
 
 # add new group
@@ -366,7 +401,9 @@ function add_new_group() {
 	local __tcid=$?
 	echo New ID: $__tcid
 	tc_add_group $__tcid $2 $3
-	echo $(make_group_conf $1 $__tcid $2 $3) >> $CONFFILE
+	if [ $tcRes == true ]; then
+		echo $(make_group_conf $1 $__tcid $2 $3) >> $CONFFILE
+	fi
 }
 
 # add new node
@@ -393,7 +430,9 @@ function add_new_node() {
 		__prio=$PRIO_DEFAULT
 	fi
 	tc_add_node $__tcid $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio
-	echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio) >> $CONFFILE
+	if [ $tcRes == true ]; then
+		echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio) >> $CONFFILE
+	fi
 }
 
 
@@ -570,4 +609,9 @@ case "$1" in
 		echo "Usage: $0 {init|clean|add|delete|list}"
 		exit 1
 esac
+
+if [ $tcRes == false ]; then
+	exit 1
+fi
+exit 0
 
