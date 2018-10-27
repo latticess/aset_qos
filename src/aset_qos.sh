@@ -111,6 +111,8 @@ function tc_add_defaultnode() {
 }
 
 
+
+
 # add a class by tc command
 #	tc_add_class $1=<class_id> $2=<parent_id> $3=<min_bps> $4=<max_bps> $5=<prio>
 function tc_add_class() {
@@ -124,6 +126,19 @@ function tc_add_class() {
 		tcRes=false
 	fi
 }
+
+# delete class by tc command
+#	tc_del_class <tcid>
+function tc_del_class() {
+	#echo tc class delete dev $QOSDEV classid 1:$1
+	tc class delete dev $QOSDEV classid 1:$1
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
+}
+
+
+
 
 # add a filter by tc command
 #	tc_add_filter $1=<tcid>
@@ -175,32 +190,24 @@ function tc_add_filter() {
 	fi
 }
 
-# add pfifo_fast qdisc to the leaf node by tc command
-#	tc_add_qdisc_pfifo_fast <tcid>
-function tc_add_leafqdisc() {
-	#echo tc qdisc add dev $QOSDEV parent 1:$1 handle 10:$1 pfifo_fast
-	tc qdisc add dev $QOSDEV parent 1:$1 handle $1: pfifo_fast
-	if [ $? != 0 ]; then
-		tcRes=false
-	fi
-}
-
-
-# delete class by tc command
-#	tc_del_class <tcid>
-function tc_del_class() {
-	#echo tc class delete dev $QOSDEV classid 1:$1
-	tc class delete dev $QOSDEV classid 1:$1
-	if [ $? != 0 ]; then
-		tcRes=false
-	fi
-}
-
 # delete filter by tc command
 #	tc_del_filter <tcid>
 function tc_del_filter() {
 	#echo tc filter delete dev $QOSDEV prio $1
 	tc filter delete dev $QOSDEV parent 1: prio $1
+	if [ $? != 0 ]; then
+		tcRes=false
+	fi
+}
+
+
+
+
+# add pfifo_fast qdisc to the leaf node by tc command
+#	tc_add_qdisc_pfifo_fast <tcid>
+function tc_add_leafqdisc() {
+	#echo tc qdisc add dev $QOSDEV parent 1:$1 handle 10:$1 pfifo_fast
+	tc qdisc add dev $QOSDEV parent 1:$1 handle $1: pfifo_fast
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -216,6 +223,9 @@ function tc_del_leafqdisc() {
 	fi
 }
 
+
+
+
 # add root to TC
 #	tc_add_root <max_bps>
 function tc_add_root() {
@@ -224,11 +234,23 @@ function tc_add_root() {
 	tc_add_defaultnode $1
 }
 
+
+
+
 # add group to TC
 #	tc_add_group <tcid> <min_bps> <max_bps>
 function tc_add_group() {
 	tc_add_class $1 1 $2 $3
 }
+
+# delete group by tc command. Delete class
+#	tc_del_group <tcid>
+function tc_del_group() {
+	tc_del_class $1
+}
+
+
+
 
 # add a node to TC
 #	tc_add_node $1=<tcid> $2=<parent_tcid>
@@ -241,12 +263,6 @@ function tc_add_node() {
 	tc_add_class $1 $2 $3 $4 ${10}
 	tc_add_filter $1 $5 $6 $7 $8 $9
 	tc_add_leafqdisc $1
-}
-
-# delete group by tc command. Delete class
-#	tc_del_group <tcid>
-function tc_del_group() {
-	tc_del_class $1
 }
 
 # delete node by tc command. Delete filter and leaf class
@@ -314,6 +330,9 @@ function clean() {
 	fi
 }
 
+
+
+
 # get new tc id
 #	read config file and get new tc id
 function get_new_tcid() {
@@ -361,29 +380,14 @@ function get_tcid() {
 	fi
 }
 
+
+
+
 # make string to store the root info in config file
 #	make_root_conf <id> <max_bps>
 function make_root_conf() {
 	echo "root,$1,1,$2"
 }
-
-# make string to store the group info in config file
-#	make_group_conf <id> <tcid> <min_bps> <max_bps>
-function make_group_conf() {
-	echo "group,$1,$2,$3,$4"
-}
-
-# make string to store the node info in config file
-#	make_node_conf $1=<id> $2=<tcid> $3=<parent_id> $4=<parent_tcid>
-#                  $5=<min_bps> $6=<max_bps>
-#                  $7=<protocol>
-#                  $8=<src_ip> $9=<src_port>
-#                  $10=<dst_ip> $11=<dst_port>
-#                  $12=<prio>
-function make_node_conf() {
-	echo "node,$1,$2,$3,$4,$5,$6,$7,$8,$9,${10},${11},${12}"
-}
-
 
 # add root
 #   add_root $1=<root_id> $2=<max_bps>
@@ -392,6 +396,15 @@ function add_root() {
 	if [ $tcRes == true ]; then
 		echo $(make_root_conf $1 $2) >> $CONFFILE
 	fi
+}
+
+
+
+
+# make string to store the group info in config file
+#	make_group_conf <id> <tcid> <min_bps> <max_bps>
+function make_group_conf() {
+	echo "group,$1,$2,$3,$4"
 }
 
 # add new group
@@ -405,36 +418,6 @@ function add_new_group() {
 		echo $(make_group_conf $1 $__tcid $2 $3) >> $CONFFILE
 	fi
 }
-
-# add new node
-#	add_new_node $1=<id> $2=<parent_id>
-#                $3=<min_bps> $4=<max_bps>
-#                $5=<protocol>
-#                $6=<src_ip> $7=<src_port>
-#                $8=<dst_ip> $9=<dst_port>
-#                $10=<prio>
-function add_new_node() {
-	get_new_tcid
-	local __tcid=$?
-	echo New ID: $__tcid
-	get_tcid $2
-	local __parent_tcid=$?
-	if [ "$__parent_tcid" == "0" ]; then
-		echo "Cannot found the parent ID $2"
-		return
-	fi
-	echo Parent ID: $__parent_tcid
-
-	local __prio=${10}
-	if [ "$__prio" == "" ]; then
-		__prio=$PRIO_DEFAULT
-	fi
-	tc_add_node $__tcid $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio
-	if [ $tcRes == true ]; then
-		echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio) >> $CONFFILE
-	fi
-}
-
 
 # delete group. It delete all child nodes
 #	del_group <id>
@@ -479,6 +462,48 @@ function del_group() {
 	mv -f $__tmpfile $CONFFILE
 }
 
+
+
+
+# make string to store the node info in config file
+#	make_node_conf $1=<id> $2=<tcid> $3=<parent_id> $4=<parent_tcid>
+#                  $5=<min_bps> $6=<max_bps>
+#                  $7=<protocol>
+#                  $8=<src_ip> $9=<src_port>
+#                  $10=<dst_ip> $11=<dst_port>
+#                  $12=<prio>
+function make_node_conf() {
+	echo "node,$1,$2,$3,$4,$5,$6,$7,$8,$9,${10},${11},${12}"
+}
+
+# add new node
+#	add_new_node $1=<id> $2=<parent_id>
+#                $3=<min_bps> $4=<max_bps>
+#                $5=<protocol>
+#                $6=<src_ip> $7=<src_port>
+#                $8=<dst_ip> $9=<dst_port>
+#                $10=<prio>
+function add_new_node() {
+	get_new_tcid
+	local __tcid=$?
+	echo New ID: $__tcid
+	get_tcid $2
+	local __parent_tcid=$?
+	if [ "$__parent_tcid" == "0" ]; then
+		echo "Cannot found the parent ID $2"
+		return
+	fi
+	echo Parent ID: $__parent_tcid
+
+	local __prio=${10}
+	if [ "$__prio" == "" ]; then
+		__prio=$PRIO_DEFAULT
+	fi
+	tc_add_node $__tcid $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio
+	if [ $tcRes == true ]; then
+		echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio) >> $CONFFILE
+	fi
+}
 
 # delete node.
 #	del_node <id>
