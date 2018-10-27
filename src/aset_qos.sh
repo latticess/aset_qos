@@ -846,6 +846,13 @@ case "$1" in
 					
 		fi
 		;;
+	reset)
+		echo Reset all QoS settings
+		shift 1
+		clear
+		sleep 1
+		init
+		;;
 	*)
 		echo "Usage: $0 {init|clear|add|delete|list} [paramters]"
 		exit 1
