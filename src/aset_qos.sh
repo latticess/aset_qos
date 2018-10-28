@@ -744,8 +744,73 @@ function list_group() {
 	echo "list_group() function is not implemented yet"
 }
 
+function print_node_array()
+{
+	local __node_id=$1
+	local __node_p_id=$2
+	local __node_llimit=$3
+	local __node_ulimit=$4
+	local __node_prio=$5
+	local __node_protocol=$6
+	local __node_src_ip=$7
+	local __node_src_port=$8
+	local __node_dst_ip=$9
+	local __node_dst_port=${10}
+
+	echo "Node [$__node_id] (Group $__node_p_id)"
+	echo "    Speed  $__node_llimit ~ $__node_ulimit"
+	local __prio=$PRIO_DEFAULT
+	if [ "$__node_prio" != "" ]; then
+		__prio=$__node_prio
+	fi
+	echo "    Prio   $__prio"
+	echo -n "    Filter"
+	local __proto=all
+	if [ "$__node_protocol" != "0" ]; then
+		__proto=$__node_protocol
+	fi
+	echo              " protocol=$__proto"
+	if [ "$__node_src_ip" != "0" ]; then
+		echo "           source ip=$__node_src_ip"
+	fi
+	if [ "$__node_src_port" != "0" ]; then
+		echo "           source port=$__node_src_port"
+	fi
+	if [ "$__node_dst_ip" != "0" ]; then
+		echo "           dest ip=$__node_dst_ip"
+	fi
+	if [ "${array[$CONFIDX_N_DST_PORT]}" != "0" ]; then
+		echo "           dest port=$__node_dst_port"
+	fi
+
+}
+
 function list_node() {
-	echo "list_node() function is not implemented yet"
+	local __counter=0
+	for line in "${conf_lines[@]}"; do
+		if [[ "$line" == "#"* ]]; then
+			continue;
+		fi
+		local array=(${line//,/ })
+
+		# check id of config
+		if [ "${array[$CONFIDX_TYPE]}" == "node" ] && [ "${array[$CONFIDX_ID]}" == "$1" ]; then
+			print_node_array ${array[$CONFIDX_ID]} \
+							 ${array[$CONFIDX_N_P_ID]} \
+							 ${array[$CONFIDX_N_LLIMIT]} \
+							 ${array[$CONFIDX_N_ULIMIT]} \
+							 ${array[$CONFIDX_N_PRIO]} \
+							 ${array[$CONFIDX_N_PROTOCOL]} \
+							 ${array[$CONFIDX_N_SRC_IP]} \
+							 ${array[$CONFIDX_N_SRC_PORT]} \
+							 ${array[$CONFIDX_N_DST_IP]} \
+							 ${array[$CONFIDX_N_DST_PORT]}
+			((__counter++))
+		fi
+	done
+	if [ "$__counter" == "0" ]; then
+		echo There is no node $1
+	fi
 }
 
 
@@ -829,9 +894,11 @@ case "$1" in
 		else
 			case "$1" in
 				group)
+					shift 1
 					list_group $*
 					;;
 				node)
+					shift 1
 					list_node $*
 					;;
 				all)
