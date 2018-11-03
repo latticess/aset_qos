@@ -545,6 +545,10 @@ function add_root() {
 	local __root_id=$1
 	local __max_bps=$2
 
+	# check if params are valid
+	param_valid_id_and_exit "$__root_id" "root ID"
+	param_valid_rate_and_exit "$__max_bps" "max_limit"
+
 	tc_add_root $__max_bps
 	if [ $tcRes == true ]; then
 		echo $(make_root_conf $__root_id $__max_bps) >> $CONFFILE
@@ -555,6 +559,9 @@ function add_root() {
 #   replace_root <max_bps>
 function replace_root() {
 	local __max_bps=$1
+
+	# check if params are valid
+	param_valid_rate_and_exit "$__max_bps" "max_limit"
 
 	tc_replace_root $__max_bps
 	if [ $tcRes != true ]; then
@@ -600,6 +607,11 @@ function add_new_group() {
 	local __min_bps=$2
 	local __max_bps=$3
 
+	# check if params are valid
+	param_valid_id_and_exit "$__group_id" "group ID"
+	param_valid_rate_and_exit "$__min_bps" "min_limit"
+	param_valid_rate_and_exit "$__max_bps" "max_limit"
+
 	get_new_tcid
 	local __tcid=$?
 	echo New ID: $__tcid
@@ -616,11 +628,16 @@ function replace_group() {
 	local __min_bps=$2
 	local __max_bps=$3
 
+	# check if params are valid
+	param_valid_id_and_exit "$__group_id" "group ID"
+	param_valid_rate_and_exit "$__min_bps" "min_limit"
+	param_valid_rate_and_exit "$__max_bps" "max_limit"
+
 	get_tcid $__group_id
 	local __tcid=$?
 	if [ "$__tcid" == "0" ]; then
 		echo "Cannot find the ID $__group_id"
-		return
+		exit 1
 	fi
 
 	tc_replace_group $__tcid $__min_bps $__max_bps
@@ -683,7 +700,7 @@ function del_group() {
 	fi
 
 	if [ "$__gcounter" == "0" ] && [ "$__ncounter" == "0" ]; then
-		echo "There is no $ID node"
+		echo "There is no $__group_id node"
 		rm -f $__tmpfile
 		return
 	fi
@@ -743,10 +760,21 @@ function add_new_node() {
 		__prio=$PRIO_DEFAULT
 	fi
 
+	# check if params are valid
+	param_valid_id_and_exit "$__id" "node ID"
+	param_valid_id_and_exit "$__parent_id" "parent ID"
+	param_valid_rate_and_exit "$__min_bps" "min_limit"
+	param_valid_rate_and_exit "$__max_bps" "max_limit"
+	param_valid_protocol_and_exit "$__protocol"
+	param_valid_ip_and_exit "$__src_ip" "src_ip"
+	param_valid_port_and_exit "$__src_port" "src_port"
+	param_valid_ip_and_exit "$__dst_ip" "dst_ip"
+	param_valid_port_and_exit "$__dst_port" "dst_port"
 	if [ "$__src_ip" == "0" ] && [ "$__src_port" == "0" ] && [ "$__dst_ip" == "0" ] && [ "$__dst_port" == "0" ]; then
 		echo Error. No filters are specified. At least one filter must be specified.
-		return
+		exit 1
 	fi
+	param_valid_prio_and_exit "$__prio"
 
 	get_new_tcid
 	local __tcid=$?
@@ -755,7 +783,7 @@ function add_new_node() {
 	local __parent_tcid=$?
 	if [ "$__parent_tcid" == "0" ]; then
 		echo "Cannot find the parent ID $__parent_id"
-		return
+		exit 1
 	fi
 	echo Parent ID: $__parent_tcid
 
@@ -786,16 +814,26 @@ function replace_node() {
 		__prio=$PRIO_DEFAULT
 	fi
 
+	# check if params are valid
+	param_valid_id_and_exit "$__id" "node ID"
+	param_valid_rate_and_exit "$__min_bps" "min_limit"
+	param_valid_rate_and_exit "$__max_bps" "max_limit"
+	param_valid_protocol_and_exit "$__protocol"
+	param_valid_ip_and_exit "$__src_ip" "src_ip"
+	param_valid_port_and_exit "$__src_port" "src_port"
+	param_valid_ip_and_exit "$__dst_ip" "dst_ip"
+	param_valid_port_and_exit "$__dst_port" "dst_port"
 	if [ "$__src_ip" == "0" ] && [ "$__src_port" == "0" ] && [ "$__dst_ip" == "0" ] && [ "$__dst_port" == "0" ]; then
-		echo Error. All filter values are 0s. One of them must be specified.
-		return
+		echo Error. No filters are specified. At least one filter must be specified.
+		exit 1
 	fi
+	param_valid_prio_and_exit "$__prio"
 
 	get_tcid $__id
 	local __tcid=$?
 	if [ "$__tcid" == "0" ]; then
 		echo "Cannot find the ID $__id"
-		return
+		exit 1
 	fi
 
 	tc_replace_node $__tcid $__min_bps $__max_bps $__protocol $__src_ip $__src_port $__dst_ip $__dst_port $__prio
@@ -942,6 +980,224 @@ function list_node() {
 }
 
 
+
+function param_valid_id() {
+	local __id=$1
+	local __stat=true
+
+	if [[ $__id =~ ^[a-zA-Z0-9_\-]+$ ]]; then
+		__stat=true
+	else
+		__stat=false
+	fi
+
+	echo $__stat
+}
+
+function param_valid_id_and_exit() {
+	local __id=$1
+	local __param_string=$2
+
+	if [ "$__id" == "" ]; then
+		echo Error!! $__param_string is not specified
+		exit 1
+	fi
+	local __stat=$(param_valid_id $__id)
+	if [ $__stat == false ]; then
+		echo Error!! ID $__id contains invalid characters.
+		exit 1
+	fi
+}
+
+
+function param_valid_rate() {
+	local __rate=$1
+	local __stat=true
+
+	if [[ $__rate =~ ^[0-9]+[kKmMgG]{0,1}bit$ ]]; then
+		__stat=true
+	else
+		__stat=false
+	fi
+
+	echo $__stat
+}
+
+function param_valid_rate_and_exit() {
+	local __rate=$1
+	local __param_string=$2
+
+	if [ "$__rate" == "" ]; then
+		echo Error!! $__param_string is not specified
+		exit 1
+	fi
+
+	local __stat=$(param_valid_rate $__rate)
+	if [ $__stat == false ]; then
+		echo Error!! $__param_string is invalid.
+		exit 1
+	fi
+}
+
+
+function param_valid_protocol() {
+	local __protocol=$1
+	local __stat=true
+
+	if [ "$__protocol" != "tcp" ] && [ "$__protocol" != "TCP" ] && [ "$__protocol" != "udp" ] && [ "$__protocol" != "UDP" ]; then
+		__stat=false
+	fi
+
+	echo $__stat
+}
+
+function param_valid_protocol_and_exit() {
+	local __protocol=$1
+
+	if [ "$__protocol" == "" ]; then
+		echo Error!! protocol is not specified
+		exit 1
+	fi
+
+	if [ "$__protocol" == "0" ]; then
+		return
+	fi
+
+	local __stat=$(param_valid_protocol $__protocol)
+	if [ $__stat == false ]; then
+		echo Error!! protocol is invalid.
+		exit 1
+	fi
+}
+
+
+function param_valid_ip() {
+	local __ip=$1
+	local __ipaddr=0.0.0.0
+	local __netmask=32
+	local __stat=true
+
+	if [[ $__ip =~ ^[0-9\.]+/[0-9]{1,2}$ ]]; then
+		OIFS=$IFS
+		IFS='/'
+		__ip=($__ip)
+		IFS=$OIFS
+		__ipaddr=${__ip[0]}
+		__netmask=${__ip[1]}
+	else
+		__ipaddr=$__ip
+	fi
+
+	if [[ $__ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+		OIFS=$IFS
+		IFS='.'
+		__ip=($__ip)
+		IFS=$OIFS
+		if [[ ${ip[0]} -gt 255 || ${ip[1]} -gt 255 || ${ip[2]} -gt 255 || ${ip[3]} -gt 255 ]]; then
+			__stat=false
+		fi
+	else
+		__stat=false
+	fi
+
+	if [[ $__netmask =~ ^[0-9]{1,2}$ ]]; then
+		if [[ $__netmask -gt 32 ]]; then
+			__stat=false
+		fi
+	else
+		__stat=false
+	fi
+
+	echo $__stat
+}
+
+function param_valid_ip_and_exit() {
+	local __ip=$1
+	local __param_string=$2
+
+	if [ "$__ip" == "" ]; then
+		echo Error!! $__param_string is not specified
+		exit 1
+	fi
+
+	if [ "$__ip" == "0" ]; then
+		return
+	fi
+
+	local __stat=$(param_valid_ip $__ip)
+	if [ $__stat == false ]; then
+		echo Error!! $__param_string is invalid.
+		exit 1
+	fi
+}
+
+
+function param_valid_port() {
+	local __port=$1
+	local __stat=true
+
+	if [[ $__port =~ ^[0-9]{1,5}$ ]]; then
+		if [[ $__port -gt 65535 ]]; then
+			__stat=false
+		fi
+	else
+		__stat=false
+	fi
+
+	echo $__stat
+}
+
+function param_valid_port_and_exit() {
+	local __port=$1
+	local __param_string=$2
+
+	if [ "$__port" == "" ]; then
+		echo Error!! $__param_string is not specified
+		exit 1
+	fi
+
+	if [ "$__port" == "0" ]; then
+		return
+	fi
+
+	local __stat=$(param_valid_port $__port)
+	if [ $__stat == false ]; then
+		echo Error!! $__param_string is invalid.
+		exit 1
+	fi
+}
+
+
+
+function param_valid_prio() {
+	local __prio=$1
+	local __stat=true
+
+	if [[ $__prio =~ ^[0-7]$ ]]; then
+		__stat=true
+	else
+		__stat=false
+	fi
+
+	echo $__stat
+}
+
+function param_valid_prio_and_exit() {
+	local __prio=$1
+
+	if [ "$__prio" == "" ]; then
+		return
+	fi
+
+	local __stat=$(param_valid_prio $__prio)
+	if [ $__stat == false ]; then
+		echo Error!! priority is invalid.
+		exit 1
+	fi
+}
+
+
+
 read_conf_file
 
 case "$1" in
@@ -955,7 +1211,7 @@ case "$1" in
 		shift 1
 		case "$1" in
 			root)
-				shit 1
+				shift 1
 				add_root $*
 				;;
 			group)
