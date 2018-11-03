@@ -85,8 +85,10 @@ function tc_add_rootqdisc() {
 #   tc_add_rootclass <max_bps>
 #       class_id is always 1
 function tc_add_rootclass() {
-	echo tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
-	tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $1
+	local __max_bps=$1
+
+	echo tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $__max_bps
+	tc class add dev $QOSDEV parent 1: classid 1:1 htb rate $__max_bps
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -96,8 +98,10 @@ function tc_add_rootclass() {
 #   tc_replace_rootclass <max_bps>
 #       class_id is always 1
 function tc_replace_rootclass() {
-	echo tc class replace dev $QOSDEV classid 1:1 htb rate $1
-	tc class replace dev $QOSDEV classid 1:1 htb rate $1
+	local __max_bps=$1
+
+	echo tc class replace dev $QOSDEV classid 1:1 htb rate $__max_bps
+	tc class replace dev $QOSDEV classid 1:1 htb rate $__max_bps
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -107,8 +111,10 @@ function tc_replace_rootclass() {
 #   tc_add_defaultnode <max_bps>
 #       class_id is 2
 function tc_add_defaultnode() {
-	echo tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $1 prio $PRIO_DEFAULT
-	tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $1 prio $PRIO_DEFAULT
+	local __max_bps=$1
+
+	echo tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $__max_bps prio $PRIO_DEFAULT
+	tc class add dev $QOSDEV parent 1:1 classid 1:2 htb rate $__max_bps prio $PRIO_DEFAULT
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -124,8 +130,10 @@ function tc_add_defaultnode() {
 #   tc_replace_defaultnode <max_bps>
 #       class_id is 2
 function tc_replace_defaultnode() {
-	echo tc class replace dev $QOSDEV classid 1:2 htb rate $1 prio $PRIO_DEFAULT
-	tc class replace dev $QOSDEV classid 1:2 htb rate $1 prio $PRIO_DEFAULT
+	local __max_bps=$1
+
+	echo tc class replace dev $QOSDEV classid 1:2 htb rate $__max_bps prio $PRIO_DEFAULT
+	tc class replace dev $QOSDEV classid 1:2 htb rate $__max_bps prio $PRIO_DEFAULT
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -135,28 +143,37 @@ function tc_replace_defaultnode() {
 
 
 # add a class by tc command
-#	tc_add_class $1=<class_id> $2=<parent_id> $3=<min_bps> $4=<max_bps> [$5=<prio>]
+#	tc_add_class <class_id> <parent_id> <min_bps> <max_bps> [<prio>]
 function tc_add_class() {
+	local __class_id=$1
+	local __parent_id=$2
+	local __min_bps=$3
+	local __max_bps=$4
 	local __prio=""
 	if [ "$5" != "" ]; then
 		__prio="prio $5"
 	fi
-	echo tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 $__prio
-	tc class add dev $QOSDEV parent 1:$2 classid 1:$1 htb rate $3 ceil $4 $__prio
+
+	echo tc class add dev $QOSDEV parent 1:$__parent_id classid 1:$__class_id htb rate $__min_bps ceil $__max_bps $__prio
+	tc class add dev $QOSDEV parent 1:$__parent_id classid 1:$__class_id htb rate $__min_bps ceil $__max_bps $__prio
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
 }
 
 # replace a class by tc command
-#	tc_replace_class $1=<class_id> $2=<min_bps> $3=<max_bps> [$4=<prio>]
+#	tc_replace_class <class_id> <min_bps> <max_bps> [<prio>]
 function tc_replace_class() {
+	local __class_id=$1
+	local __min_bps=$2
+	local __max_bps=$3
 	local __prio=""
 	if [ "$4" != "" ]; then
 		__prio="prio $4"
 	fi
-	echo tc class replace dev $QOSDEV  classid 1:$1 htb rate $2 ceil $3 $__prio
-	tc class replace dev $QOSDEV classid 1:$1 htb rate $2 ceil $3 $__prio
+
+	echo tc class replace dev $QOSDEV  classid 1:$__class_id htb rate $__min_bps ceil $__max_bps $__prio
+	tc class replace dev $QOSDEV classid 1:$__class_id htb rate $__min_bps ceil $__max_bps $__prio
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -165,14 +182,16 @@ function tc_replace_class() {
 # delete class by tc command
 #	tc_del_class <tcid>
 function tc_del_class() {
-	local __classinfo=$(tc class show dev $QOSDEV classid 1:$1)
+	local __tcid=$1
+
+	local __classinfo=$(tc class show dev $QOSDEV classid 1:$__tcid)
 	if [ "$__classinfo" == "" ]; then
 		echo There is no class 1:$1. Already deleted.
 		return
 	fi
 
-	echo tc class delete dev $QOSDEV classid 1:$1
-	tc class delete dev $QOSDEV classid 1:$1
+	echo tc class delete dev $QOSDEV classid 1:$__tcid
+	tc class delete dev $QOSDEV classid 1:$__tcid
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -182,18 +201,24 @@ function tc_del_class() {
 
 
 # add a filter by tc command
-#	tc_add_filter $1=<tcid>
-#                 $2=<protocol>
-#                 $3=<src_ip> $4=<src_port>
-#                 $5=<dst_ip> $6=<dst_port>
+#	tc_add_filter <tcid> <protocol>
+#                 <src_ip> <src_port>
+#                 <dst_ip> <dst_port>
 function tc_add_filter() {
+	local __tcid=$1
+	local __protocol=$2
+	local __src_ip=$3
+	local __src_port=$4
+	local __dst_ip=$5
+	local __dst_port=$6
+
 	local __param=""
 
 	# protocol
 	local __protocol=""
-	if [ "$2" == "tcp" ]; then
+	if [ "$__protocol" == "tcp" ]; then
 		__protocol=$PROTOCOL_TCP
-	elif [ "$2" == "udp" ]; then
+	elif [ "$__protocol" == "udp" ]; then
 		__protocol=$PROTOCOL_UDP
 	fi
 	if [ "$__protocol" != "" ]; then
@@ -201,31 +226,31 @@ function tc_add_filter() {
 	fi
 
 	# src_ip
-	if [ "$3" != "0" ]; then
-		#__param="$__param match ip src $3/32"
-		__param="$__param match ip src $3"
+	if [ "$__src_ip" != "0" ]; then
+		#__param="$__param match ip src $__src_ip/32"
+		__param="$__param match ip src $__src_ip"
 	fi
 
 	# src_port
-	if [ "$4" != "0" ]; then
-		__param="$__param match ip sport $4 0xffff"
+	if [ "$__src_port" != "0" ]; then
+		__param="$__param match ip sport $__src_port 0xffff"
 	fi
 
 	# dst_ip
-	if [ "$5" != "0" ]; then
-		#__param="$__param match ip dst $5/32"
-		__param="$__param match ip dst $5"
+	if [ "$__dst_ip" != "0" ]; then
+		#__param="$__param match ip dst $__dst_ip/32"
+		__param="$__param match ip dst $__dst_ip"
 	fi
 
 	# dst_port
-	if [ "$6" != "0" ]; then
-		__param="$__param match ip dport $6 0xffff"
+	if [ "$__dst_port" != "0" ]; then
+		__param="$__param match ip dport $__dst_port 0xffff"
 	fi
 
-	__param="$__param flowid 1:$1"
+	__param="$__param flowid 1:$__tcid"
 	#echo $__param
-	echo tc filter add dev $QOSDEV parent 1: prio $1 protocol ip u32 $__param
-	tc filter add dev $QOSDEV parent 1: prio $1 protocol ip u32 $__param
+	echo tc filter add dev $QOSDEV parent 1: prio $__tcid protocol ip u32 $__param
+	tc filter add dev $QOSDEV parent 1: prio $__tcid protocol ip u32 $__param
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -234,14 +259,16 @@ function tc_add_filter() {
 # delete filter by tc command
 #	tc_del_filter <tcid>
 function tc_del_filter() {
-	local __filterinfo=$(tc filter show dev $QOSDEV prio $1)
+	local __tcid=$1
+
+	local __filterinfo=$(tc filter show dev $QOSDEV prio $__tcid)
 	if [ "$__filterinfo" == "" ]; then
-		echo There is no filter $1. Already deleted.
+		echo There is no filter $__tcid. Already deleted.
 		return
 	fi
 
-	echo tc filter delete dev $QOSDEV prio $1
-	tc filter delete dev $QOSDEV prio $1
+	echo tc filter delete dev $QOSDEV prio $__tcid
+	tc filter delete dev $QOSDEV prio $__tcid
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -253,8 +280,10 @@ function tc_del_filter() {
 # add pfifo_fast qdisc to the leaf node by tc command
 #	tc_add_qdisc_pfifo_fast <tcid>
 function tc_add_leafqdisc() {
-	echo tc qdisc add dev $QOSDEV parent 1:$1 handle 10:$1 pfifo_fast
-	tc qdisc add dev $QOSDEV parent 1:$1 handle $1: pfifo_fast
+	local __tcid=$1
+
+	echo tc qdisc add dev $QOSDEV parent 1:$__tcid handle 10:$__tcid pfifo_fast
+	tc qdisc add dev $QOSDEV parent 1:$__tcid handle $__tcid: pfifo_fast
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -263,14 +292,16 @@ function tc_add_leafqdisc() {
 # delete leaf qdisc by tc command
 #	tc_del_leafqdisc <tcid>
 function tc_del_leafqdisc() {
-	local __qdiscinfo=$(tc qdisc show dev $QOSDEV | grep -w $1:)
+	local __tcid=$1
+
+	local __qdiscinfo=$(tc qdisc show dev $QOSDEV | grep -w $__tcid:)
 	if [ "$__qdiscinfo" == "" ]; then
-		echo There is no qdisc $1:. Already deleted.
+		echo There is no qdisc $__tcid:. Already deleted.
 		return
 	fi
 
-	echo tc qdisc delete dev $QOSDEV handle $1: parent 1:$1
-	tc qdisc delete dev $QOSDEV handle $1: parent 1:$1
+	echo tc qdisc delete dev $QOSDEV handle $__tcid: parent 1:$__tcid
+	tc qdisc delete dev $QOSDEV handle $__tcid: parent 1:$__tcid
 	if [ $? != 0 ]; then
 		tcRes=false
 	fi
@@ -282,16 +313,20 @@ function tc_del_leafqdisc() {
 # add root to TC
 #	tc_add_root <max_bps>
 function tc_add_root() {
+	local __max_bps=$1
+
 	tc_add_rootqdisc
-	tc_add_rootclass $1
-	tc_add_defaultnode $1
+	tc_add_rootclass $__max_bps
+	tc_add_defaultnode $__max_bps
 }
 
 # replace root to TC
 #	tc_replace_root <max_bps>
 function tc_replace_root() {
-	tc_replace_rootclass $1
-	tc_replace_defaultnode $1
+	local __max_bps=$1
+
+	tc_replace_rootclass $__max_bps
+	tc_replace_defaultnode $__max_bps
 }
 
 
@@ -300,56 +335,89 @@ function tc_replace_root() {
 # add group to TC
 #	tc_add_group <tcid> <min_bps> <max_bps>
 function tc_add_group() {
-	tc_add_class $1 1 $2 $3
+	local __tcid=$1
+	local __min_bps=$2
+	local __max_bps=$3
+
+	tc_add_class $__tcid 1 $__min_bps $__max_bps
 }
 
 # replace group to TC
 #	tc_replace_group <tcid> <min_bps> <max_bps>
 function tc_replace_group() {
-	tc_replace_class $1 $2 $3
+	local __tcid=$1
+	local __min_bps=$2
+	local __max_bps=$3
+
+	tc_replace_class $__tcid $__min_bps $__max_bps
 }
 
 # delete group by tc command. Delete class
 #	tc_del_group <tcid>
 function tc_del_group() {
-	tc_del_class $1
+	local __tcid=$1
+
+	tc_del_class $__tcid
 }
 
 
 
 
 # add a node to TC
-#	tc_add_node $1=<tcid> $2=<parent_tcid>
-#               $3=<min_bps> $4=<max_bps>
-#               $5=<protocol>
-#               $6=<src_ip> $7=<src_port>
-#               $8=<dst_ip> $9=<dst_port>
-#               $10=<prio>
+#	tc_add_node <tcid> <parent_tcid>
+#               <min_bps> <max_bps>
+#               <protocol>
+#               <src_ip> <src_port>
+#               <dst_ip> <dst_port>
+#               <prio>
 function tc_add_node() {
-	tc_add_class $1 $2 $3 $4 ${10}
-	tc_add_filter $1 $5 $6 $7 $8 $9
-	tc_add_leafqdisc $1
+	local __tcid=$1
+	local __parent_tcid=$2
+	local __min_bps=$3
+	local __max_bps=$4
+	local __protocol=$5
+	local __src_ip=$6
+	local __src_port=$7
+	local __dst_ip=$8
+	local __dst_port=$9
+	local __prio=${10}
+
+	tc_add_class $__tcid $__parent_tcid $__min_bps $__max_bps $__prio
+	tc_add_filter $__tcid $__protocol $__src_ip $__src_port $__dst_ip $__dst_port
+	tc_add_leafqdisc $__tcid
 }
 
 # replace a node to TC
-#	tc_replace_node $1=<tcid>
-#               $2=<min_bps> $3=<max_bps>
-#               $4=<protocol>
-#               $5=<src_ip> $6=<src_port>
-#               $7=<dst_ip> $8=<dst_port>
-#               $9=<prio>
+#	tc_replace_node <tcid>
+#               <min_bps> <max_bps>
+#               <protocol>
+#               <src_ip> <src_port>
+#               <dst_ip> <dst_port>
+#               <prio>
 function tc_replace_node() {
-	tc_replace_class $1 $2 $3 $9
-	tc_del_filter $1
-	tc_add_filter $1 $4 $5 $6 $7 $8
+	local __tcid=$1
+	local __min_bps=$2
+	local __max_bps=$3
+	local __protocol=$4
+	local __src_ip=$5
+	local __src_port=$6
+	local __dst_ip=$7
+	local __dst_port=$8
+	local __prio=$9
+
+	tc_replace_class $__tcid $__min_bps $__max_bps $__prio
+	tc_del_filter $__tcid
+	tc_add_filter $__tcid $__protocol $__src_ip $__src_port $__dst_ip $__dst_port
 }
 
 # delete node by tc command. Delete filter and leaf class
 #	tc_del_node <tcid>
 function tc_del_node() {
-	tc_del_leafqdisc $1
-	tc_del_filter $1
-	tc_del_class $1
+	local __tcid=$1
+
+	tc_del_leafqdisc $__tcid
+	tc_del_filter $__tcid
+	tc_del_class $__tcid
 }
 
 
@@ -415,7 +483,7 @@ function clear() {
 # get new tc id
 #	read config file and get new tc id
 function get_new_tcid() {
-	local __tcid=$1
+#	local __tcid=$1
 	local __ids=""
 
 	for line in "${conf_lines[@]}"; do
@@ -438,7 +506,7 @@ function get_new_tcid() {
 # get tcid from group_id or node_id
 #	get_tcid <id>
 function get_tcid() {
-	local __tcid=$2
+	local __id=$1
 	local __found=false;
 
 	for line in "${conf_lines[@]}"; do
@@ -446,7 +514,7 @@ function get_tcid() {
 			continue;
 		fi
 		local array=(${line//,/ })
-		if [ "${array[$CONFIDX_ID]}" == "$1" ]; then
+		if [ "${array[$CONFIDX_ID]}" == "$__id" ]; then
 			__found=true;
 			break;
 		fi
@@ -463,24 +531,32 @@ function get_tcid() {
 
 
 # make string to store the root info in config file
-#	make_root_conf <id> <max_bps>
+#	make_root_conf <root_id> <max_bps>
 function make_root_conf() {
-	echo "root,$1,1,$2"
+	local __root_id=$1
+	local __max_bps=$2
+
+	echo "root,$__root_id,1,$__max_bps"
 }
 
 # add root
-#   add_root $1=<root_id> $2=<max_bps>
+#   add_root <root_id> <max_bps>
 function add_root() {
-	tc_add_root $2
+	local __root_id=$1
+	local __max_bps=$2
+
+	tc_add_root $__max_bps
 	if [ $tcRes == true ]; then
-		echo $(make_root_conf $1 $2) >> $CONFFILE
+		echo $(make_root_conf $__root_id $__max_bps) >> $CONFFILE
 	fi
 }
 
 # replace root
-#   replace_root $1=<max_bps>
+#   replace_root <max_bps>
 function replace_root() {
-	tc_replace_root $1
+	local __max_bps=$1
+
+	tc_replace_root $__max_bps
 	if [ $tcRes != true ]; then
 		return
 	fi
@@ -495,7 +571,7 @@ function replace_root() {
 
 		# check id of config
 		if [ "${array[$CONFIDX_TYPE]}" == "root" ]; then
-			echo $(make_root_conf ${array[$CONFIDX_ID]} $1) >> $__tmpfile
+			echo $(make_root_conf ${array[$CONFIDX_ID]} $__max_bps) >> $__tmpfile
 		else
 			echo "$line" >> $__tmpfile
 		fi
@@ -507,34 +583,47 @@ function replace_root() {
 
 
 # make string to store the group info in config file
-#	make_group_conf <id> <tcid> <min_bps> <max_bps>
+#	make_group_conf <group_id> <tcid> <min_bps> <max_bps>
 function make_group_conf() {
-	echo "group,$1,$2,$3,$4"
+	local __group_id=$1
+	local __tcid=$2
+	local __min_bps=$3
+	local __max_bps=$4
+
+	echo "group,$__group_id,$__tcid,$__min_bps,$__max_bps"
 }
 
 # add new group
-#	add_new_group $1=<group_id> $2=<min_bps> $3=<max_bps>
+#	add_new_group <group_id> <min_bps> <max_bps>
 function add_new_group() {
+	local __group_id=$1
+	local __min_bps=$2
+	local __max_bps=$3
+
 	get_new_tcid
 	local __tcid=$?
 	echo New ID: $__tcid
-	tc_add_group $__tcid $2 $3
+	tc_add_group $__tcid $__min_bps $__max_bps
 	if [ $tcRes == true ]; then
-		echo $(make_group_conf $1 $__tcid $2 $3) >> $CONFFILE
+		echo $(make_group_conf $1 $__tcid $__min_bps $__max_bps) >> $CONFFILE
 	fi
 }
 
 # replace group
-#	replace_group $1=<group_id> $2=<min_bps> $3=<max_bps>
+#	replace_group <group_id> <min_bps> <max_bps>
 function replace_group() {
-	get_tcid $1
+	local __group_id=$1
+	local __min_bps=$2
+	local __max_bps=$3
+
+	get_tcid $__group_id
 	local __tcid=$?
 	if [ "$__tcid" == "0" ]; then
-		echo "Cannot find the ID $1"
+		echo "Cannot find the ID $__group_id"
 		return
 	fi
 
-	tc_replace_group $__tcid $2 $3
+	tc_replace_group $__tcid $__min_bps $__max_bps
 	if [ $tcRes != true ]; then
 		return
 	fi
@@ -548,8 +637,8 @@ function replace_group() {
 		local array=(${line//,/ })
 
 		# check id of config
-		if [ "${array[$CONFIDX_TYPE]}" == "group" ] && [ "${array[$CONFIDX_ID]}" == "$1" ]; then
-			echo $(make_group_conf $1 $__tcid $2 $3) >> $__tmpfile
+		if [ "${array[$CONFIDX_TYPE]}" == "group" ] && [ "${array[$CONFIDX_ID]}" == "$__group_id" ]; then
+			echo $(make_group_conf $__group_id $__tcid $__min_bps $__max_bps) >> $__tmpfile
 		else
 			echo "$line" >> $__tmpfile
 		fi
@@ -560,6 +649,8 @@ function replace_group() {
 # delete group. It delete all child nodes
 #	del_group <id>
 function del_group() {
+	local __group_id=$1
+
 	local __tmpfile=$(dirname "${CONFFILE}")/.$(basename "${CONFFILE}").tmp$$
 	local __ncounter=0
 	local __gcounter=0
@@ -573,11 +664,11 @@ function del_group() {
 		local array=(${line//,/ })
 
 		# check id of config
-		if [ "${array[$CONFIDX_TYPE]}" == "group" ] && [ "${array[$CONFIDX_ID]}" == "$1" ]; then
+		if [ "${array[$CONFIDX_TYPE]}" == "group" ] && [ "${array[$CONFIDX_ID]}" == "$__group_id" ]; then
 			# will delete this group after delete all child nodes
 			((__gcounter++))
 			__gid=${array[$CONFIDX_TCID]}
-		elif [ "${array[$CONFIDX_TYPE]}" == "node" ] && [ "${array[$CONFIDX_N_P_ID]}" == "$1" ]; then
+		elif [ "${array[$CONFIDX_TYPE]}" == "node" ] && [ "${array[$CONFIDX_N_P_ID]}" == "$__group_id" ]; then
 			# child node to delete
 			tc_del_node ${array[$CONFIDX_TCID]}
 			((__ncounter++))
@@ -604,75 +695,110 @@ function del_group() {
 
 
 # make string to store the node info in config file
-#	make_node_conf $1=<id> $2=<tcid> $3=<parent_id> $4=<parent_tcid>
-#                  $5=<min_bps> $6=<max_bps>
-#                  $7=<protocol>
-#                  $8=<src_ip> $9=<src_port>
-#                  $10=<dst_ip> $11=<dst_port>
-#                  $12=<prio>
+#	make_node_conf <id> <tcid> <parent_id> <parent_tcid>
+#                  <min_bps> <max_bps>
+#                  <protocol>
+#                  <src_ip> <src_port>
+#                  <dst_ip> <dst_port>
+#                  <prio>
 function make_node_conf() {
-	echo "node,$1,$2,$3,$4,$5,$6,$7,$8,$9,${10},${11},${12}"
+	local __id=$1
+	local __tcid=$2
+	local __parent_id=$3
+	local __parent_tcid=$4
+	local __min_bps=$5
+	local __max_bps=$6
+	local __protocol=$7
+	local __src_ip=$8
+	local __src_port=$9
+	local __dst_ip=${10}
+	local __dst_port=${11}
+	local __prio=${12}
+
+	local __nodeinfo="node,$__id,$__tcid,$__parent_id,$__parent_tcid"
+	local __classinfo="$__min_bps,$__max_bps"
+	local __filterinfo="$__protocol,$__src_ip,$__src_port,$__dst_ip,$__dst_port"
+	echo "$__nodeinfo,$__classinfo,$__filterinfo,$__prio"
 }
 
 # add new node
-#	add_new_node $1=<id> $2=<parent_id>
-#                $3=<min_bps> $4=<max_bps>
-#                $5=<protocol>
-#                $6=<src_ip> $7=<src_port>
-#                $8=<dst_ip> $9=<dst_port>
-#                $10=<prio>
+#	add_new_node <id> <parent_id>
+#                <min_bps> <max_bps>
+#                <protocol>
+#                <src_ip> <src_port>
+#                <dst_ip> <dst_port>
+#                <prio>
 function add_new_node() {
-	if [ "$6" == "0" ] && [ "$7" == "0" ] && [ "$8" == "0" ] && [ "$9" == "0" ]; then
-		echo Error. All filter values are 0s. One of them must be specified.
+	local __id=$1
+	local __parent_id=$2
+	local __min_bps=$3
+	local __max_bps=$4
+	local __protocol=$5
+	local __src_ip=$6
+	local __src_port=$7
+	local __dst_ip=$8
+	local __dst_port=$9
+	local __prio=${10}
+	if [ "$__prio" == "" ]; then
+		__prio=$PRIO_DEFAULT
+	fi
+
+	if [ "$__src_ip" == "0" ] && [ "$__src_port" == "0" ] && [ "$__dst_ip" == "0" ] && [ "$__dst_port" == "0" ]; then
+		echo Error. No filters are specified. At least one filter must be specified.
 		return
 	fi
 
 	get_new_tcid
 	local __tcid=$?
 	echo New ID: $__tcid
-	get_tcid $2
+	get_tcid $__parent_id
 	local __parent_tcid=$?
 	if [ "$__parent_tcid" == "0" ]; then
-		echo "Cannot find the parent ID $2"
+		echo "Cannot find the parent ID $__parent_id"
 		return
 	fi
 	echo Parent ID: $__parent_tcid
 
-	local __prio=${10}
-	if [ "$__prio" == "" ]; then
-		__prio=$PRIO_DEFAULT
-	fi
-	tc_add_node $__tcid $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio
+	tc_add_node $__tcid $__parent_tcid $__min_bps $__max_bps $__protocol $__src_ip $__src_port $__dst_ip $__dst_port $__prio
 	if [ $tcRes == true ]; then
-		echo $(make_node_conf $1 $__tcid $2 $__parent_tcid $3 $4 $5 $6 $7 $8 $9 $__prio) >> $CONFFILE
+		echo $(make_node_conf $__id $__tcid $__parent_id $__parent_tcid $__min_bps $__max_bps $__protocol $__src_ip $__src_port $__dst_ip $__dst_port $__prio) >> $CONFFILE
 	fi
 }
 
 # replace node
-#	replace_node $1=<id>
-#                $2=<min_bps> $3=<max_bps>
-#                $4=<protocol>
-#                $5=<src_ip> $6=<src_port>
-#                $7=<dst_ip> $8=<dst_port>
-#                $9=<prio>
+#	replace_node <id>
+#                <min_bps> <max_bps>
+#                <protocol>
+#                <src_ip> <src_port>
+#                <dst_ip> <dst_port>
+#                <prio>
 function replace_node() {
-	if [ "$5" == "0" ] && [ "$6" == "0" ] && [ "$7" == "0" ] && [ "$8" == "0" ]; then
-		echo Error. All filter values are 0s. One of them must be specified.
-		return
-	fi
-
-	get_tcid $1
-	local __tcid=$?
-	if [ "$__tcid" == "0" ]; then
-		echo "Cannot find the ID $1"
-		return
-	fi
-
+	local __id=$1
+	local __min_bps=$2
+	local __max_bps=$3
+	local __protocol=$4
+	local __src_ip=$5
+	local __src_port=$6
+	local __dst_ip=$7
+	local __dst_port=$8
 	local __prio=$9
 	if [ "$__prio" == "" ]; then
 		__prio=$PRIO_DEFAULT
 	fi
-	tc_replace_node $__tcid $2 $3 $4 $5 $6 $7 $8 $__prio
+
+	if [ "$__src_ip" == "0" ] && [ "$__src_port" == "0" ] && [ "$__dst_ip" == "0" ] && [ "$__dst_port" == "0" ]; then
+		echo Error. All filter values are 0s. One of them must be specified.
+		return
+	fi
+
+	get_tcid $__id
+	local __tcid=$?
+	if [ "$__tcid" == "0" ]; then
+		echo "Cannot find the ID $__id"
+		return
+	fi
+
+	tc_replace_node $__tcid $__min_bps $__max_bps $__protocol $__src_ip $__src_port $__dst_ip $__dst_port $__prio
 	if [ $tcRes != true ]; then
 		return
 	fi
@@ -687,7 +813,7 @@ function replace_node() {
 
 		# check id of config
 		if [ "${array[$CONFIDX_TYPE]}" == "node" ] && [ "${array[$CONFIDX_ID]}" == "$1" ]; then
-			echo $(make_node_conf $1 $__tcid ${array[$CONFIDX_N_P_ID]} ${array[$CONFIDX_N_P_TCID]} $2 $3 $4 $5 $6 $7 $8 $__prio) >> $__tmpfile
+			echo $(make_node_conf $1 $__tcid ${array[$CONFIDX_N_P_ID]} ${array[$CONFIDX_N_P_TCID]} $__min_bps $__max_bps $__protocol $__src_ip $__src_port $__dst_ip $__dst_port $__prio) >> $__tmpfile
 		else
 			echo "$line" >> $__tmpfile
 		fi
@@ -698,6 +824,8 @@ function replace_node() {
 # delete node.
 #	del_node <id>
 function del_node() {
+	local __id=$1
+
 	local __tmpfile=$(dirname "${CONFFILE}")/.$(basename "${CONFFILE}").tmp$$
 	local __counter=0
 
@@ -710,14 +838,14 @@ function del_node() {
 		local array=(${line//,/ })
 
 		# check id of config
-		if [ "${array[$CONFIDX_ID]}" != "$1" ]; then
+		if [ "${array[$CONFIDX_ID]}" != "$__id" ]; then
 			echo "$line" >> $__tmpfile
 			continue;
 		fi
 
 		# if the id is not node, error
 		if [ "${array[$CONFIDX_TYPE]}" != "node" ]; then
-			echo "ID $1 is not node, but ${array[$CONFIDX_TYPE]}"
+			echo "ID $__id is not node, but ${array[$CONFIDX_TYPE]}"
 			rm -f $__tmpfile
 			exit 1
 		fi
