@@ -186,7 +186,7 @@ function tc_del_class() {
 
 	local __classinfo=$(tc class show dev $QOSDEV classid 1:$__tcid)
 	if [ "$__classinfo" == "" ]; then
-		echo There is no class 1:$1. Already deleted.
+		echo Warning!! There is no class 1:$1. Already deleted.
 		return
 	fi
 
@@ -263,7 +263,7 @@ function tc_del_filter() {
 
 	local __filterinfo=$(tc filter show dev $QOSDEV prio $__tcid)
 	if [ "$__filterinfo" == "" ]; then
-		echo There is no filter $__tcid. Already deleted.
+		echo Warning!! There is no filter $__tcid. Already deleted.
 		return
 	fi
 
@@ -296,7 +296,7 @@ function tc_del_leafqdisc() {
 
 	local __qdiscinfo=$(tc qdisc show dev $QOSDEV | grep -w $__tcid:)
 	if [ "$__qdiscinfo" == "" ]; then
-		echo There is no qdisc $__tcid:. Already deleted.
+		echo Warning!! There is no qdisc $__tcid:. Already deleted.
 		return
 	fi
 
@@ -518,7 +518,7 @@ function get_tcid() {
 			__found=true;
 			break;
 		fi
-	done < $CONFFILE
+	done
 
 	if [ "$__found" == "false" ]; then
 		return 0
@@ -549,6 +549,18 @@ function add_root() {
 	param_valid_id_and_exit "$__root_id" "root ID"
 	param_valid_rate_and_exit "$__max_bps" "max_limit"
 
+	# check if root already exist
+	for line in "${conf_lines[@]}"; do
+		if [[ "$line" == "#"* ]]; then
+			continue;
+		fi
+		local array=(${line//,/ })
+		if [ "${array[$CONFIDX_TYPE]}" == "root" ]; then
+			echo "Error!! root node already exists"
+			exit 1
+		fi
+	done
+
 	tc_add_root $__max_bps
 	if [ $tcRes == true ]; then
 		echo $(make_root_conf $__root_id $__max_bps) >> $CONFFILE
@@ -562,6 +574,24 @@ function replace_root() {
 
 	# check if params are valid
 	param_valid_rate_and_exit "$__max_bps" "max_limit"
+
+	# check if root exists
+	local __found=false;
+	for line in "${conf_lines[@]}"; do
+		if [[ "$line" == "#"* ]]; then
+			continue;
+		fi
+		local array=(${line//,/ })
+		if [ "${array[$CONFIDX_TYPE]}" == "root" ]; then
+			__found=true;
+			break;
+		fi
+	done
+	if [ "$__found" == "false" ]; then
+		echo Warning!! root node is not defined yet.
+		return
+	fi
+
 
 	tc_replace_root $__max_bps
 	if [ $tcRes != true ]; then
@@ -612,6 +642,13 @@ function add_new_group() {
 	param_valid_rate_and_exit "$__min_bps" "min_limit"
 	param_valid_rate_and_exit "$__max_bps" "max_limit"
 
+	# check if ID is already exist
+	get_tcid $__group_id
+	if [ "$?" != "0" ]; then
+		echo Error!! $__group_id already exists.
+		exit 1
+	fi
+
 	get_new_tcid
 	local __tcid=$?
 	echo New ID: $__tcid
@@ -636,7 +673,7 @@ function replace_group() {
 	get_tcid $__group_id
 	local __tcid=$?
 	if [ "$__tcid" == "0" ]; then
-		echo "Cannot find the ID $__group_id"
+		echo "Error!! Cannot find the ID $__group_id"
 		exit 1
 	fi
 
@@ -700,7 +737,7 @@ function del_group() {
 	fi
 
 	if [ "$__gcounter" == "0" ] && [ "$__ncounter" == "0" ]; then
-		echo "There is no $__group_id node"
+		echo "Warning!! There is no $__group_id node"
 		rm -f $__tmpfile
 		return
 	fi
@@ -771,10 +808,17 @@ function add_new_node() {
 	param_valid_ip_and_exit "$__dst_ip" "dst_ip"
 	param_valid_port_and_exit "$__dst_port" "dst_port"
 	if [ "$__src_ip" == "0" ] && [ "$__src_port" == "0" ] && [ "$__dst_ip" == "0" ] && [ "$__dst_port" == "0" ]; then
-		echo Error. No filters are specified. At least one filter must be specified.
+		echo Error!! No filters are specified. At least one filter must be specified.
 		exit 1
 	fi
 	param_valid_prio_and_exit "$__prio"
+
+	# check if ID is already exist
+	get_tcid $__id
+	if [ "$?" != "0" ]; then
+		echo Error!! $__id already exists.
+		exit 1
+	fi
 
 	get_new_tcid
 	local __tcid=$?
@@ -782,7 +826,7 @@ function add_new_node() {
 	get_tcid $__parent_id
 	local __parent_tcid=$?
 	if [ "$__parent_tcid" == "0" ]; then
-		echo "Cannot find the parent ID $__parent_id"
+		echo "Error!! Cannot find the parent ID $__parent_id"
 		exit 1
 	fi
 	echo Parent ID: $__parent_tcid
@@ -824,7 +868,7 @@ function replace_node() {
 	param_valid_ip_and_exit "$__dst_ip" "dst_ip"
 	param_valid_port_and_exit "$__dst_port" "dst_port"
 	if [ "$__src_ip" == "0" ] && [ "$__src_port" == "0" ] && [ "$__dst_ip" == "0" ] && [ "$__dst_port" == "0" ]; then
-		echo Error. No filters are specified. At least one filter must be specified.
+		echo Error!! No filters are specified. At least one filter must be specified.
 		exit 1
 	fi
 	param_valid_prio_and_exit "$__prio"
@@ -832,7 +876,7 @@ function replace_node() {
 	get_tcid $__id
 	local __tcid=$?
 	if [ "$__tcid" == "0" ]; then
-		echo "Cannot find the ID $__id"
+		echo "Error!! Cannot find the ID $__id"
 		exit 1
 	fi
 
@@ -883,7 +927,7 @@ function del_node() {
 
 		# if the id is not node, error
 		if [ "${array[$CONFIDX_TYPE]}" != "node" ]; then
-			echo "ID $__id is not node, but ${array[$CONFIDX_TYPE]}"
+			echo "Error!! ID $__id is not node, but ${array[$CONFIDX_TYPE]}"
 			rm -f $__tmpfile
 			exit 1
 		fi
@@ -893,9 +937,9 @@ function del_node() {
 	done
 
 	if [ "$__counter" == "0" ]; then
-		echo "There is no $ID node"
+		echo "Warning!! There is no $ID node"
 		rm -f $__tmpfile
-		exit 1
+		return
 	fi
 
 	mv -f $__tmpfile $CONFFILE
@@ -975,7 +1019,7 @@ function list_node() {
 		fi
 	done
 	if [ "$__counter" == "0" ]; then
-		echo There is no node $1
+		echo Warning!! There is no node $1
 	fi
 }
 
