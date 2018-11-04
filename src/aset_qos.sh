@@ -4,7 +4,7 @@
 
 # config file location
 #CONFFILE=/etc/aset/qos/qos.conf
-CONFFILE=/home/kimsh/QoS/git/aset_qos/conf/qos.conf
+CONFFILE=/home/kimsh/QoS/git/aset_qos/conf/qos3.conf
 
 # QoS device definitions
 NDEV=enp0s8
@@ -57,6 +57,11 @@ PROTOCOL_UDP=17
 tcRes=true
 
 function read_conf_file() {
+	if [ ! -f $CONFFILE ]; then
+		echo Warning!! Config file does not exist.
+		return
+	fi
+
 	local counter=0
 	while IFS='' read -r line || [[ -n "$line" ]]; do
 		conf_lines[$counter]=$line
