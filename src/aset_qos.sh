@@ -4,7 +4,7 @@
 
 # config file location
 #CONFFILE=/etc/aset/qos/qos.conf
-CONFFILE=/home/kimsh/QoS/git/aset_qos/conf/qos3.conf
+CONFFILE=/home/kimsh/QoS/git/aset_qos/conf/qos.conf
 
 # QoS device definitions
 NDEV=enp0s8
@@ -951,56 +951,49 @@ function del_node() {
 }
 
 
-function list_all() {
-	echo "list_all() function is not implemented yet"
-}
 
-function list_group() {
-	echo "list_group() function is not implemented yet"
-}
-
-function print_node_array()
-{
-	local __node_id=$1
-	local __node_p_id=$2
-	local __node_llimit=$3
-	local __node_ulimit=$4
-	local __node_prio=$5
+function print_node() {
+	local __indent=$1
+	local __node_id=$2
+	local __node_p_id=$3
+	local __node_llimit=$4
+	local __node_ulimit=$5
 	local __node_protocol=$6
 	local __node_src_ip=$7
 	local __node_src_port=$8
 	local __node_dst_ip=$9
 	local __node_dst_port=${10}
-
-	echo "Node [$__node_id] (Group $__node_p_id)"
-	echo "    Speed  $__node_llimit ~ $__node_ulimit"
-	local __prio=$PRIO_DEFAULT
+	local __node_prio=${11}
 	if [ "$__node_prio" != "" ]; then
-		__prio=$__node_prio
+		__node_prio=$PRIO_DEFAULT
 	fi
-	echo "    Prio   $__prio"
-	echo -n "    Filter"
-	local __proto=all
+
+	printf "%${__indent}sNode $__node_id (Group $__node_p_id): $__node_llimit-$__node_ulimit, prioity=$__node_prio\n" ""
+
+	# print filters
+	local __indent2=0
+	let "__indent2=$__indent+4"
 	if [ "$__node_protocol" != "0" ]; then
-		__proto=$__node_protocol
+		printf "%${__indent2}sprotocol    $__node_protocol\n" ""
 	fi
-	echo              " protocol=$__proto"
 	if [ "$__node_src_ip" != "0" ]; then
-		echo "           source ip=$__node_src_ip"
+		printf "%${__indent2}ssource ip   $__node_src_ip\n"
 	fi
 	if [ "$__node_src_port" != "0" ]; then
-		echo "           source port=$__node_src_port"
+		printf "%${__indent2}ssource port $__node_src_port\n"
 	fi
 	if [ "$__node_dst_ip" != "0" ]; then
-		echo "           dest ip=$__node_dst_ip"
+		printf "%${__indent2}sdest ip     $__node_dst_ip\n"
 	fi
-	if [ "${array[$CONFIDX_N_DST_PORT]}" != "0" ]; then
-		echo "           dest port=$__node_dst_port"
+	if [ "$__node_dst_port" != "0" ]; then
+		printf "%${__indent2}sdest port   $__node_dst_port\n"
 	fi
-
 }
 
+
 function list_node() {
+	local __id=$1
+
 	local __counter=0
 	for line in "${conf_lines[@]}"; do
 		if [[ "$line" == "#"* ]]; then
@@ -1009,24 +1002,155 @@ function list_node() {
 		local array=(${line//,/ })
 
 		# check id of config
-		if [ "${array[$CONFIDX_TYPE]}" == "node" ] && [ "${array[$CONFIDX_ID]}" == "$1" ]; then
-			print_node_array ${array[$CONFIDX_ID]} \
-							 ${array[$CONFIDX_N_P_ID]} \
-							 ${array[$CONFIDX_N_LLIMIT]} \
-							 ${array[$CONFIDX_N_ULIMIT]} \
-							 ${array[$CONFIDX_N_PRIO]} \
-							 ${array[$CONFIDX_N_PROTOCOL]} \
-							 ${array[$CONFIDX_N_SRC_IP]} \
-							 ${array[$CONFIDX_N_SRC_PORT]} \
-							 ${array[$CONFIDX_N_DST_IP]} \
-							 ${array[$CONFIDX_N_DST_PORT]}
+		if [ "${array[$CONFIDX_TYPE]}" == "node" ]; then
+			if [ "$__id" == "all" ] || [ "$__id" == "${array[$CONFIDX_ID]}" ]; then
+				print_node 0 \
+							${array[$CONFIDX_ID]} \
+							${array[$CONFIDX_N_P_ID]} \
+							${array[$CONFIDX_N_LLIMIT]} \
+							${array[$CONFIDX_N_ULIMIT]} \
+							${array[$CONFIDX_N_PROTOCOL]} \
+							${array[$CONFIDX_N_SRC_IP]} \
+							${array[$CONFIDX_N_SRC_PORT]} \
+							${array[$CONFIDX_N_DST_IP]} \
+							${array[$CONFIDX_N_DST_PORT]} \
+							${array[$CONFIDX_N_PRIO]}
+				((__counter++))
+			fi
+		fi
+	done
+	if [ "$__counter" == "0" ]; then
+		echo Warning!! There is no node $__id
+	fi
+}
+
+
+function print_group() {
+	local __indent=$1
+	local __recur=$2
+	local __group_id=$3
+	local __group_llimit=$4
+	local __group_ulimit=$5
+
+	printf "%${__indent}sGroup $__group_id: $__group_llimit-$__group_ulimit\n" ""
+
+	if [ "$__recur" != "true" ]; then
+		return
+	fi
+
+	# print children nodes
+	local __indent2=0
+	let "__indent2=$__indent+4"
+	local __line=""
+	for __line in "${conf_lines[@]}"; do
+		if [[ "$__line" == "#"* ]]; then
+			continue;
+		fi
+		local array=(${__line//,/ })
+
+		# check id of config
+		if [ "${array[$CONFIDX_TYPE]}" == "node" ] && [ "$__group_id" == "${array[$CONFIDX_N_P_ID]}" ]; then
+			print_node $__indent2 \
+						${array[$CONFIDX_ID]} \
+						${array[$CONFIDX_N_P_ID]} \
+						${array[$CONFIDX_N_LLIMIT]} \
+						${array[$CONFIDX_N_ULIMIT]} \
+						${array[$CONFIDX_N_PROTOCOL]} \
+						${array[$CONFIDX_N_SRC_IP]} \
+						${array[$CONFIDX_N_SRC_PORT]} \
+						${array[$CONFIDX_N_DST_IP]} \
+						${array[$CONFIDX_N_DST_PORT]} \
+						${array[$CONFIDX_N_PRIO]}
+		fi
+	done
+}
+
+function list_group() {
+	local __recur=$1
+	local __id=$2
+
+	local __counter=0
+	for line in "${conf_lines[@]}"; do
+		if [[ "$line" == "#"* ]]; then
+			continue;
+		fi
+		local array=(${line//,/ })
+
+		# check id of config
+		if [ "${array[$CONFIDX_TYPE]}" == "group" ]; then
+			if [ "$__id" == "all" ] || [ "$__id" == "${array[$CONFIDX_ID]}" ]; then
+				print_group 0 \
+							$__recur \
+							${array[$CONFIDX_ID]} \
+							${array[$CONFIDX_G_LLIMIT]} \
+							${array[$CONFIDX_G_ULIMIT]}
+				((__counter++))
+			fi
+		fi
+	done
+	if [ "$__counter" == "0" ]; then
+		echo Warning!! There is no group $__id
+	fi
+}
+
+
+function print_root() {
+	local __indent=$1
+	local __recur=$2
+	local __root_id=$3
+	local __root_limit=$4
+
+	printf "%${__indent}sSystem $__root_id: $__root_limit\n" ""
+
+	if [ "$__recur" != "true" ]; then
+		return
+	fi
+
+	# print children group
+	local __indent2=0
+	let "__indent2=$__indent+4"
+	local __line=""
+	for __line in "${conf_lines[@]}"; do
+		if [[ "$__line" == "#"* ]]; then
+			continue;
+		fi
+		local array=(${__line//,/ })
+
+		# check id of config
+		if [ "${array[$CONFIDX_TYPE]}" == "group" ]; then
+			print_group $__indent2 \
+						$__recur \
+						${array[$CONFIDX_ID]} \
+						${array[$CONFIDX_G_LLIMIT]} \
+						${array[$CONFIDX_G_ULIMIT]}
+		fi
+	done
+}
+
+function list_root() {
+	local __recur=$1
+
+	local __counter=0
+	for line in "${conf_lines[@]}"; do
+		if [[ "$line" == "#"* ]]; then
+			continue;
+		fi
+		local array=(${line//,/ })
+
+		# check id of config
+		if [ "${array[$CONFIDX_TYPE]}" == "root" ]; then
+			print_root 0 \
+						$__recur \
+						${array[$CONFIDX_ID]} \
+						${array[$CONFIDX_R_LIMIT]}
 			((__counter++))
 		fi
 	done
 	if [ "$__counter" == "0" ]; then
-		echo Warning!! There is no node $1
+		echo Warning!! There is no root.
 	fi
 }
+
 
 
 
@@ -1323,19 +1447,33 @@ case "$1" in
 	list)
 		shift 1
 		if [ $# -eq 0 ]; then
-			list_all
+			list_root true
 		else
 			case "$1" in
+				root)
+					shift 1
+					recur=false
+					if [ "$1" == "-r" ]; then
+						shift 1
+						recur=true
+					fi
+					list_root $recur
+					;;
 				group)
 					shift 1
-					list_group $*
+					recur=false
+					if [ "$1" == "-r" ]; then
+						shift 1
+						recur=true
+					fi
+					list_group $recur $*
 					;;
 				node)
 					shift 1
 					list_node $*
 					;;
 				all)
-					list_all
+					list_root true
 					;;
 				*)
 					echo "Usage: $0 list all"
